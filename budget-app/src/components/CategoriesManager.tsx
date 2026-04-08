@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Settings2, Trash2, Info, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, Settings2, Trash2, Info, AlertTriangle } from 'lucide-react';
 import type { Category } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -12,7 +12,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
   const [newCatName, setNewCatName] = useState('');
   const [newCatPercentage, setNewCatPercentage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isProcess, setIsProcess] = useState(false);
+  const [, setIsProcess] = useState(false);
 
   const totalPercentage = categories.reduce((acc, cat) => acc + Number(cat.percentage), 0);
 

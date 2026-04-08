@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Send, Bot, MessageCircle, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { Category, Expense } from '../types';
+import type { Category } from '../types';
 
 import { supabase } from '../lib/supabase';
 
