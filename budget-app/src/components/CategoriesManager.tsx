@@ -59,13 +59,13 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Seguro quieres eliminar esta categoría?')) return;
-    
+
     setIsProcess(true);
     const { error } = await supabase
       .from('categories')
       .delete()
       .eq('id', id);
-      
+
     if (error) {
       console.error(error);
       alert('Error eliminando');
@@ -140,9 +140,9 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
               </h4>
             </div>
             <div className="w-1/2 bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
-              <div 
-                className={`h-full transition-all duration-500 rounded-full ${totalPercentage === 100 ? 'bg-emerald-500' : totalPercentage > 100 ? 'bg-rose-500' : 'bg-cyan-400'}`} 
-                style={{ width: `${Math.min(totalPercentage, 100)}%` }} 
+              <div
+                className={`h-full transition-all duration-500 rounded-full ${totalPercentage === 100 ? 'bg-emerald-500' : totalPercentage > 100 ? 'bg-rose-500' : 'bg-cyan-400'}`}
+                style={{ width: `${Math.min(totalPercentage, 100)}%` }}
               />
             </div>
           </div>
@@ -159,7 +159,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
                     <Trash2 size={18} />
                   </button>
                 </div>
-                
+
                 <div className="mb-4">
                   <span className="text-3xl font-bold text-white">{cat.percentage}%</span>
                 </div>
@@ -174,7 +174,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
                 </div>
               </div>
             ))}
-            
+
             {categories.length === 0 && (
               <div className="sm:col-span-2 py-10 flex flex-col items-center justify-center text-slate-500 bg-slate-900/50 border border-dashed border-slate-700 rounded-xl">
                 <Info size={32} className="mb-3 opacity-50" />
