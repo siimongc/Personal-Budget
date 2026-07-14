@@ -48,17 +48,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
           );
         })}
       </nav>
-      <div className="p-6 mt-auto">
-        <div className="bg-slate-800 p-4 rounded-xl flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
-            US
-          </div>
-          <div className="text-sm">
-            <p className="text-slate-200 font-medium">Usuario</p>
-            <p className="text-slate-500 text-xs">Plan Premium</p>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };
