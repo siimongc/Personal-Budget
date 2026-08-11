@@ -1,20 +1,32 @@
 import React, { useState } from 'react';
 import { Plus, Settings2, Trash2, Info, AlertTriangle } from 'lucide-react';
-import type { Category } from '../types';
+import type { Category, MemberId } from '../types';
 import { supabase } from '../lib/supabase';
+import MemberSelector from './MemberSelector';
+import { getMember } from '../lib/members';
 
 interface CategoriesManagerProps {
   categories: Category[];
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
+  currentMember: MemberId;
+  onMemberChange: (member: MemberId) => void;
+  onAfterChange?: () => void;
 }
 
-const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCategories }) => {
+const CategoriesManager: React.FC<CategoriesManagerProps> = ({
+  categories,
+  setCategories,
+  currentMember,
+  onMemberChange,
+  onAfterChange,
+}) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatPercentage, setNewCatPercentage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [, setIsProcess] = useState(false);
 
   const totalPercentage = categories.reduce((acc, cat) => acc + Number(cat.percentage), 0);
+  const activeMember = getMember(currentMember);
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +49,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
     const { data, error } = await supabase
       .from('categories')
       .insert([
-        { name: newCatName, percentage: amount, color: newCatColor }
+        { name: newCatName, percentage: amount, color: newCatColor, owner: currentMember }
       ])
       .select()
       .single();
@@ -53,6 +65,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
       setCategories([...categories, data as Category]);
       setNewCatName('');
       setNewCatPercentage('');
+      onAfterChange?.();
     }
     setIsProcess(false);
   };
@@ -71,6 +84,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
       alert('Error eliminando');
     } else {
       setCategories(categories.filter((c) => c.id !== id));
+      onAfterChange?.();
     }
     setIsProcess(false);
   };
@@ -79,16 +93,21 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
     <div className="space-y-6">
       <header>
         <h2 className="text-3xl font-bold text-white mb-2">Gestión de Categorías</h2>
-        <p className="text-slate-400">Administra tus sobres de dinero y sus porcentajes designados.</p>
+        <p className="text-slate-400">
+          Administra los sobres de dinero y sus porcentajes para{' '}
+          <span className={`font-semibold ${activeMember.textClass}`}>{activeMember.label}</span>.
+        </p>
       </header>
+
+      <MemberSelector currentMember={currentMember} onChange={onMemberChange} />
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Formulario de creación */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 h-fit relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150 duration-500"></div>
+          <div className={`absolute top-0 right-0 w-32 h-32 blur-3xl rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150 duration-500 ${activeMember.bgClass}`}></div>
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-            <Plus className="mr-2 text-emerald-400" size={20} />
-            Nueva Categoría
+            <Plus className={`mr-2 ${activeMember.textClass}`} size={20} />
+            Nueva Categoría de {activeMember.label}
           </h3>
           <form onSubmit={handleCreateCategory} className="space-y-4 relative z-10">
             <div>
@@ -96,7 +115,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
               <input
                 type="text"
                 placeholder="Ej. Alimentos, Viajes..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${activeMember.ringClass.replace('ring-', 'focus:ring-')}`}
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
               />
@@ -108,7 +127,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
                 placeholder="10"
                 min="1"
                 max="100"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-colors"
+                className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${activeMember.ringClass.replace('ring-', 'focus:ring-')}`}
                 value={newCatPercentage}
                 onChange={(e) => setNewCatPercentage(e.target.value)}
               />
@@ -123,7 +142,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
 
             <button
               type="submit"
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2.5 rounded-lg transition-colors shadow-[0_0_15px_rgba(52,211,153,0.3)] hover:shadow-[0_0_25px_rgba(52,211,153,0.5)]"
+              className={`w-full text-slate-950 font-semibold py-2.5 rounded-lg transition-colors bg-gradient-to-r ${activeMember.gradient} hover:opacity-90 ${activeMember.glowClass}`}
             >
               Añadir Categoría
             </button>
@@ -134,7 +153,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
         <div className="md:col-span-2 space-y-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-400">Total asignado</p>
+              <p className="text-sm text-slate-400">Total asignado por {activeMember.label}</p>
               <h4 className="text-2xl font-bold text-white mt-1">
                 {totalPercentage}% <span className="text-slate-500 text-lg font-normal">/ 100%</span>
               </h4>
@@ -178,7 +197,7 @@ const CategoriesManager: React.FC<CategoriesManagerProps> = ({ categories, setCa
             {categories.length === 0 && (
               <div className="sm:col-span-2 py-10 flex flex-col items-center justify-center text-slate-500 bg-slate-900/50 border border-dashed border-slate-700 rounded-xl">
                 <Info size={32} className="mb-3 opacity-50" />
-                <p>No tienes categorías configuradas aún.</p>
+                <p>{activeMember.label} aún no tiene categorías configuradas.</p>
               </div>
             )}
           </div>

@@ -1,9 +1,24 @@
+export type MemberId = 'simon' | 'maria';
+
+export interface Member {
+  id: MemberId;
+  label: string;
+  initial: string;
+  accent: 'emerald' | 'pink';
+  gradient: string;
+  ringClass: string;
+  bgClass: string;
+  textClass: string;
+  glowClass: string;
+}
+
 export interface Category {
   id: string;
   name: string;
   percentage: number;
+  owner: MemberId;
   created_at?: string;
-  color?: string; // Optional for UI coloring
+  color?: string;
 }
 
 export interface Expense {
@@ -11,19 +26,28 @@ export interface Expense {
   category_id: string;
   amount: number;
   description: string;
+  owner: MemberId;
+  created_at: string;
+}
+
+export interface MonthlyIncome {
+  id: string;
+  owner: MemberId;
+  period: string;
+  amount: number;
   created_at: string;
 }
 
 export interface SavingsProjection {
   principal: number;
-  annualInterestRate: number; // Porcentaje Efectivo Anual (EA)
+  annualInterestRate: number;
   months: number;
 }
 
 export interface CreditComparison {
   purchaseValue: number;
-  creditCardRate: number; // Tasa Efectiva Mensual o Anual según convención
-  installments: number; // Cuotas
+  creditCardRate: number;
+  installments: number;
 }
 
 export interface CryptoAsset {

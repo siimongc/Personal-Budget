@@ -1,44 +1,53 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import CategoriesManager from './components/CategoriesManager';
 import IncomeDistributor from './components/IncomeDistributor';
 import FinancialCalculators from './components/FinancialCalculators';
 import TelegramBotMVP from './components/TelegramBotMVP';
 import InvestmentDashboard from './components/InvestmentDashboard';
-import type { Category } from './types';
+import type { Category, MemberId } from './types';
 import { Menu, X } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { loadCurrentMember, saveCurrentMember } from './lib/members';
 
 function App() {
   const [currentTab, setCurrentTab] = useState('categories');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Estado global de categorías proveniente de Supabase
+  // Estado global de miembro activo (Simón o María), persistido en localStorage
+  const [currentMember, setCurrentMember] = useState<MemberId>(() => loadCurrentMember());
+
+  // Estado global de categorías del miembro activo, proveniente de Supabase
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  React.useEffect(() => {
-    fetchCategories();
-  }, []);
+  const handleSetMember = (member: MemberId) => {
+    setCurrentMember(member);
+    saveCurrentMember(member);
+  };
 
-  const fetchCategories = async () => {
+  useEffect(() => {
+    fetchCategories(currentMember);
+  }, [currentMember]);
+
+  const fetchCategories = async (owner: MemberId) => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('categories')
         .select('*')
+        .eq('owner', owner)
         .order('created_at', { ascending: true });
-      
+
       if (error) {
         throw error;
       }
-      
+
       if (data) {
         setCategories(data as Category[]);
       }
     } catch (error) {
       console.error('Error cargando categorías:', error);
-      // Fallback a array vacío o un log visual
     } finally {
       setIsLoading(false);
     }
@@ -55,9 +64,23 @@ function App() {
 
     switch (currentTab) {
       case 'categories':
-        return <CategoriesManager categories={categories} setCategories={setCategories} />;
+        return (
+          <CategoriesManager
+            categories={categories}
+            setCategories={setCategories}
+            currentMember={currentMember}
+            onMemberChange={handleSetMember}
+            onAfterChange={() => fetchCategories(currentMember)}
+          />
+        );
       case 'income':
-        return <IncomeDistributor categories={categories} />;
+        return (
+          <IncomeDistributor
+            categories={categories}
+            currentMember={currentMember}
+            onMemberChange={handleSetMember}
+          />
+        );
       case 'calculators':
         return <FinancialCalculators />;
       case 'telegram':
@@ -65,22 +88,30 @@ function App() {
       case 'dashboard':
         return <InvestmentDashboard />;
       default:
-        return <CategoriesManager categories={categories} setCategories={setCategories} />;
+        return (
+          <CategoriesManager
+            categories={categories}
+            setCategories={setCategories}
+            currentMember={currentMember}
+            onMemberChange={handleSetMember}
+            onAfterChange={() => fetchCategories(currentMember)}
+          />
+        );
     }
   };
 
   return (
     <div className="flex bg-slate-950 min-h-screen font-sans selection:bg-emerald-500/30">
-      
+
       {/* Sidebar Desktop */}
-      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} />
+      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} currentMember={currentMember} />
 
       {/* Mobile Header Menu Button */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center z-50">
         <h1 className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
           Finanzas
         </h1>
-        <button 
+        <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="text-white p-2"
         >
@@ -106,8 +137,8 @@ function App() {
                   setIsMobileMenuOpen(false);
                 }}
                 className={`flex items-center space-x-3 px-4 py-4 rounded-xl transition-all duration-200 text-left ${
-                  currentTab === item.id 
-                    ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]' 
+                  currentTab === item.id
+                    ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]'
                     : 'text-slate-400'
                 }`}
               >

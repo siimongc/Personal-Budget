@@ -1,15 +1,18 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  Calculator, 
-  MessageSquare, 
-  LineChart 
+import {
+  LayoutDashboard,
+  Wallet,
+  Calculator,
+  MessageSquare,
+  LineChart
 } from 'lucide-react';
+import type { MemberId } from '../types';
+import { getMember } from '../lib/members';
 
 interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
+  currentMember: MemberId;
 }
 
 export const navItems = [
@@ -20,7 +23,9 @@ export const navItems = [
   { id: 'dashboard', label: 'Inversiones', icon: LineChart },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, currentMember }) => {
+  const member = getMember(currentMember);
+
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 h-screen flex flex-col hidden md:flex">
       <div className="p-6">
@@ -37,8 +42,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
               key={item.id}
               onClick={() => setCurrentTab(item.id)}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                isActive 
-                  ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]' 
+                isActive
+                  ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
@@ -50,12 +55,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
       </nav>
       <div className="p-6 mt-auto">
         <div className="bg-slate-800 p-4 rounded-xl flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
-            US
+          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${member.gradient} flex items-center justify-center text-white font-bold text-sm`}>
+            {member.initial}
           </div>
           <div className="text-sm">
-            <p className="text-slate-200 font-medium">Usuario</p>
-            <p className="text-slate-500 text-xs">Plan Premium</p>
+            <p className="text-slate-200 font-medium">{member.label}</p>
+            <p className="text-slate-500 text-xs">Miembro activo</p>
           </div>
         </div>
       </div>
