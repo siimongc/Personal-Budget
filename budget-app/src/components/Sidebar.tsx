@@ -53,7 +53,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, currentMem
           );
         })}
       </nav>
-<<<<<<< HEAD
       <div className="p-6 mt-auto">
         <div className="bg-slate-800 p-4 rounded-xl flex items-center space-x-3">
           <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${member.gradient} flex items-center justify-center text-white font-bold text-sm`}>
@@ -65,8 +64,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, currentMem
           </div>
         </div>
       </div>
-=======
->>>>>>> 27c6cae23b034567fa2bcc4639d34769f24966b3
     </aside>
   );
 };
