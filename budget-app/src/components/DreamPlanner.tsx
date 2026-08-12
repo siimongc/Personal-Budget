@@ -114,7 +114,6 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
   onMemberChange,
 }) => {
   const [member, setMember] = useState<MemberId>(currentMember);
-  const [mode, setMode] = useState<'time' | 'amount'>('time');
   const [currentSavings, setCurrentSavings] = useState<number | ''>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [goal, setGoal] = useState<number | ''>('');
@@ -360,45 +359,10 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
           <Target className="text-emerald-400" /> Sueños Realistas
         </h2>
         <p className="text-slate-400">
-          ¿Cuánto te falta para tu meta? Te lo calculamos con tu ritmo real de los últimos{' '}
-          {MONTHS_WINDOW} periodos guardados.
+          Calculamos cuánto tardarías con tu ritmo actual y, si defines un plazo, cuánto deberías
+          aportar al mes para llegar a tiempo. Todo con el crecimiento compuesto que elijas.
         </p>
       </header>
-
-      <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Calculator size={16} className="text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-            ¿Qué quieres calcular?
-          </h3>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={() => setMode('time')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-              mode === 'time'
-                ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30'
-                : 'bg-slate-950/40 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Clock size={16} />
-            <span>¿Cuánto tardaré?</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('amount')}
-            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-              mode === 'amount'
-                ? 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/30'
-                : 'bg-slate-950/40 text-slate-400 hover:text-slate-200 border border-slate-800'
-            }`}
-          >
-            <Calculator size={16} />
-            <span>¿Cuánto debo ahorrar al mes?</span>
-          </button>
-        </div>
-      </section>
 
       <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -550,11 +514,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1 flex items-center justify-between">
                   <span>Plazo en años</span>
-                  <span className="text-xs text-slate-500">
-                    {mode === 'time'
-                      ? 'Necesario para "¿Cuánto debo ahorrar?"'
-                      : 'Usado para el cálculo de aporte'}
-                  </span>
+                  <span className="text-xs text-slate-500">Opcional · Define tu horizonte</span>
                 </label>
                 <div className="relative">
                   <input
@@ -607,28 +567,21 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
 
           {/* Resultado */}
           <div className="lg:col-span-3 space-y-4">
-            {mode === 'time' ? (
-              <TimeModeResult
-                timeResult={timeResult}
-                memberInfo={memberInfo}
-                selectedCategory={selectedCategory}
-                projectionData={projectionData}
-                categoryHasNoHistory={selectedCategoryHasNoHistory}
-                ea={ea}
-              />
-            ) : (
-              <AmountModeResult
-                amountResult={amountResult}
-                memberInfo={memberInfo}
-                amountChartData={amountChartData}
-                categoryHasNoHistory={selectedCategoryHasNoHistory}
-                ea={ea}
-              />
-            )}
+            <CombinedResult
+              timeResult={timeResult}
+              amountResult={amountResult}
+              memberInfo={memberInfo}
+              selectedCategory={selectedCategory}
+              projectionData={projectionData}
+              amountChartData={amountChartData}
+              categoryHasNoHistory={selectedCategoryHasNoHistory}
+              ea={ea}
+              hasYearsInput={years !== '' && Number(years) > 0}
+            />
 
             {selectedCategoryHasNoHistory &&
-              ((mode === 'time' && timeResult?.kind === 'projection') ||
-                (mode === 'amount' && amountResult?.kind === 'amount')) && (
+              ((timeResult?.kind === 'projection') ||
+                (amountResult?.kind === 'amount')) && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start gap-3 text-amber-400 text-sm">
                   <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
                   <p>
@@ -721,169 +674,6 @@ type TimeResult =
   | TimeProjectionResult
   | null;
 
-interface TimeModeResultProps {
-  timeResult: TimeResult;
-  memberInfo: ReturnType<typeof getMember>;
-  selectedCategory: Category | null;
-  projectionData: Array<{ month: number; ahorro: number }>;
-  categoryHasNoHistory: boolean;
-  ea: number | '';
-}
-
-const TimeModeResult: React.FC<TimeModeResultProps> = ({
-  timeResult,
-  memberInfo,
-  selectedCategory,
-  projectionData,
-  categoryHasNoHistory,
-  ea,
-}) => {
-  if (!timeResult) {
-    return (
-      <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-10 flex flex-col items-center justify-center text-center h-full min-h-[280px]">
-        <GoalIcon size={32} className="text-slate-600 mb-3" />
-        <p className="text-slate-300 font-medium">Cuéntanos tu sueño</p>
-        <p className="text-slate-500 text-sm mt-1 max-w-xs">
-          Llena los campos para ver cuánto tardarías en alcanzar tu objetivo.
-        </p>
-      </div>
-    );
-  }
-
-  if (timeResult.kind === 'covered') {
-    return (
-      <CoveredCard
-        memberInfo={memberInfo}
-        saved={timeResult.saved}
-        target={timeResult.target}
-      />
-    );
-  }
-
-  if (timeResult.kind === 'no_contribution') {
-    return (
-      <NoContributionCard
-        categoryName={selectedCategory?.name ?? ''}
-        remaining={timeResult.remaining}
-      />
-    );
-  }
-
-  const yearsDisplay = timeResult.months / 12;
-  const timeLabel =
-    timeResult.months >= 12
-      ? `${timeResult.months} meses · ${yearsDisplay.toFixed(1)} años`
-      : `${timeResult.months} ${timeResult.months === 1 ? 'mes' : 'meses'}`;
-
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-      <div className={`absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${memberInfo.bgClass}`} />
-      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-[80px] rounded-full pointer-events-none" />
-
-      <div className="relative z-10 space-y-6">
-        <div>
-          <p className="text-sm text-slate-400 uppercase tracking-wider mb-1">Tiempo estimado</p>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span className={`text-5xl sm:text-6xl font-bold ${memberInfo.textClass}`}>
-              {timeResult.months}
-            </span>
-            <span className="text-xl text-slate-300">
-              {timeResult.months === 1 ? 'mes' : 'meses'}
-            </span>
-            <span className="text-sm text-slate-500">· {timeLabel}</span>
-          </div>
-          <p className="text-slate-400 mt-2">
-            Llegarías en <strong className="text-white">{timeResult.targetDate}</strong>
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-3 gap-4">
-          <MiniStat
-            label="Aporte mensual"
-            value={formatCurrency(timeResult.contribution)}
-            tone={memberInfo.textClass}
-          />
-          <MiniStat
-            label="Te faltan"
-            value={formatCurrency(timeResult.remaining)}
-            tone="text-amber-400"
-          />
-          <MiniStat label="Objetivo" value={formatCurrency(timeResult.target)} tone="text-white" />
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-          <p className="text-xs text-slate-500 mb-3 flex items-center gap-2">
-            <Sparkles size={12} />
-            {categoryHasNoHistory
-              ? 'Estimación: la categoría no tiene historial, usamos % actual sobre el último ingreso.'
-              : `Basado en ${timeResult.sampleCount} ${timeResult.sampleCount === 1 ? 'periodo guardado' : 'periodos guardados'}.`}
-            {' · '}Cálculo con <strong className="text-slate-300">
-              {ea === '' || Number(ea) === 0 ? '0%' : `${Number(ea)}%`} EA
-            </strong>
-          </p>
-          <div style={{ width: '100%', height: 200 }}>
-            <ResponsiveContainer>
-              <LineChart data={projectionData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="month"
-                  stroke="#64748b"
-                  label={{
-                    value: 'Meses',
-                    position: 'insideBottom',
-                    offset: -2,
-                    fill: '#64748b',
-                    fontSize: 11,
-                  }}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  stroke="#64748b"
-                  tickFormatter={(v: number) => formatShortCurrency(v)}
-                  width={70}
-                  tick={{ fontSize: 11 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 12,
-                  }}
-                  labelStyle={{ color: '#cbd5e1' }}
-                  formatter={(value) => {
-                    const numValue = typeof value === 'number' ? value : Number(value ?? 0);
-                    return [formatCurrency(numValue), 'Ahorro'];
-                  }}
-                  labelFormatter={(label) => `Mes ${label}`}
-                />
-                <ReferenceLine
-                  y={timeResult.target}
-                  stroke="#34d399"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: 'Objetivo',
-                    position: 'right',
-                    fill: '#34d399',
-                    fontSize: 11,
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="ahorro"
-                  stroke="#22d3ee"
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 interface AmountResult {
   kind: 'amount';
   saved: number;
@@ -904,245 +694,406 @@ type AmountResultType =
   | AmountResult
   | null;
 
-interface AmountModeResultProps {
+interface CombinedResultProps {
+  timeResult: TimeResult;
   amountResult: AmountResultType;
   memberInfo: ReturnType<typeof getMember>;
+  selectedCategory: Category | null;
+  projectionData: Array<{ month: number; ahorro: number }>;
   amountChartData: Array<{ year: number; requerido: number; actual: number }>;
   categoryHasNoHistory: boolean;
   ea: number | '';
+  hasYearsInput: boolean;
 }
 
-const AmountModeResult: React.FC<AmountModeResultProps> = ({
+const CombinedResult: React.FC<CombinedResultProps> = ({
+  timeResult,
   amountResult,
   memberInfo,
+  selectedCategory,
+  projectionData,
   amountChartData,
   categoryHasNoHistory,
   ea,
+  hasYearsInput,
 }) => {
-  if (!amountResult) {
+  // Estado vacío: sin datos para calcular.
+  if (!timeResult) {
     return (
       <div className="bg-slate-900 border border-dashed border-slate-800 rounded-2xl p-10 flex flex-col items-center justify-center text-center h-full min-h-[280px]">
-        <Calculator size={32} className="text-slate-600 mb-3" />
-        <p className="text-slate-300 font-medium">Define tu plazo</p>
+        <GoalIcon size={32} className="text-slate-600 mb-3" />
+        <p className="text-slate-300 font-medium">Cuéntanos tu sueño</p>
         <p className="text-slate-500 text-sm mt-1 max-w-xs">
-          Indica tu ahorro actual, la categoría, el objetivo y los años en los que quieres
-          lograrlo. Te diremos cuánto debes aportar al mes.
+          Llena ahorro, categoría y objetivo para empezar. Si añades un plazo en años también te
+          diremos cuánto aportar al mes.
         </p>
       </div>
     );
   }
 
-  if (amountResult.kind === 'covered') {
+  // Covered: ya tienes el objetivo.
+  if (timeResult.kind === 'covered') {
     return (
       <CoveredCard
         memberInfo={memberInfo}
-        saved={amountResult.saved}
-        target={amountResult.target}
+        saved={timeResult.saved}
+        target={timeResult.target}
       />
     );
   }
 
-  const isOnTrack = amountResult.cushion >= 0;
-  const hasCurrentPace = amountResult.currentMonthly > 0;
-  const shortfall = amountResult.requiredMonthly - amountResult.currentMonthly;
-  const sampleLabel =
-    amountResult.sampleCount === 0
-      ? 'Sin historial de la categoría'
-      : `Basado en ${amountResult.sampleCount} ${amountResult.sampleCount === 1 ? 'periodo guardado' : 'periodos guardados'}`;
+  // No contribution: nunca llega con 0 aporte y 0% EA.
+  if (timeResult.kind === 'no_contribution') {
+    return (
+      <NoContributionCard
+        categoryName={selectedCategory?.name ?? ''}
+        remaining={timeResult.remaining}
+      />
+    );
+  }
+
+  const yearsDisplay = timeResult.months / 12;
+  const timeLabel =
+    timeResult.months >= 12
+      ? `${timeResult.months} meses · ${yearsDisplay.toFixed(1)} años`
+      : `${timeResult.months} ${timeResult.months === 1 ? 'mes' : 'meses'}`;
+
+  const showAmountBlock = hasYearsInput && amountResult && amountResult.kind === 'amount';
+  const eaLabel = ea === '' || Number(ea) === 0 ? '0%' : `${Number(ea)}%`;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
       <div className={`absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${memberInfo.bgClass}`} />
       <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-[80px] rounded-full pointer-events-none" />
 
-      <div className="relative z-10 space-y-6">
-        <div>
-          <p className="text-sm text-slate-400 uppercase tracking-wider mb-1">
-            Aporte mensual requerido
+      <div className="relative z-10 space-y-8">
+        {/* ── Bloque tiempo ── */}
+        <section>
+          <p className="text-xs text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <Clock size={14} /> Al ritmo actual
           </p>
           <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="text-5xl sm:text-6xl font-bold text-white">
-              {formatCurrency(amountResult.requiredMonthly)}
+            <span className={`text-5xl sm:text-6xl font-bold ${memberInfo.textClass}`}>
+              {timeResult.months}
             </span>
-            <span className="text-xl text-slate-300">/ mes</span>
+            <span className="text-xl text-slate-300">
+              {timeResult.months === 1 ? 'mes' : 'meses'}
+            </span>
+            <span className="text-sm text-slate-500">· {timeLabel}</span>
           </div>
           <p className="text-slate-400 mt-2">
-            Para llegar a <strong className="text-white">{formatCurrency(amountResult.target)}</strong> en{' '}
-            <strong className="text-white">
-              {amountResult.years} {amountResult.years === 1 ? 'año' : 'años'}
+            con tu aporte de{' '}
+            <strong className={memberInfo.textClass}>
+              {formatCurrency(timeResult.contribution)}/mes
             </strong>{' '}
-            ({amountResult.totalMonths} meses).
+            llegarías en <strong className="text-white">{timeResult.targetDate}</strong>.
           </p>
-        </div>
 
-        <div
-          className={`rounded-xl p-4 border ${
-            isOnTrack
-              ? 'bg-emerald-500/10 border-emerald-500/30'
-              : 'bg-amber-500/10 border-amber-500/30'
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {isOnTrack ? (
-              <TrendingUp size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
-            ) : (
-              <TrendingDown size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <p className={`font-semibold ${isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {isOnTrack ? '¡Vas por buen camino!' : 'Necesitas ajustar tu ritmo'}
-              </p>
-              {hasCurrentPace ? (
-                <p className="text-sm text-slate-300 mt-1">
-                  Tu ritmo actual es{' '}
-                  <strong className="text-white">
-                    {formatCurrency(amountResult.currentMonthly)}/mes
-                  </strong>
-                  {isOnTrack ? (
-                    <>
-                      {' '}
-                      · Te sobra{' '}
-                      <strong className="text-emerald-400">
-                        {formatCurrency(amountResult.cushion)}/mes
-                      </strong>
-                      .
-                    </>
-                  ) : (
-                    <>
-                      {' '}
-                      · Te faltan{' '}
-                      <strong className="text-amber-400">
-                        {formatCurrency(shortfall)}/mes
-                      </strong>{' '}
-                      para llegar a tiempo.
-                    </>
-                  )}
-                </p>
-              ) : (
-                <p className="text-sm text-slate-300 mt-1">
-                  La categoría no tiene historial registrado. Ajusta su porcentaje o guarda
-                  periodos en Distribuidor para poder comparar.
-                </p>
-              )}
-              {hasCurrentPace && amountResult.targetDateAtCurrent && (
-                <p className="text-xs text-slate-400 mt-1.5">
-                  Al ritmo actual llegarías en{' '}
-                  <strong className="text-slate-200">{amountResult.targetDateAtCurrent}</strong>{' '}
-                  ({amountResult.monthsAtCurrent} meses).
-                </p>
-              )}
-            </div>
+          <div className="grid sm:grid-cols-3 gap-4 mt-5">
+            <MiniStat
+              label="Tu ritmo/mes"
+              value={formatCurrency(timeResult.contribution)}
+              tone={memberInfo.textClass}
+            />
+            <MiniStat
+              label="Te faltan"
+              value={formatCurrency(timeResult.remaining)}
+              tone="text-amber-400"
+            />
+            <MiniStat
+              label="Objetivo"
+              value={formatCurrency(timeResult.target)}
+              tone="text-white"
+            />
           </div>
-        </div>
+        </section>
 
-        <div className="grid sm:grid-cols-3 gap-4">
-          <MiniStat
-            label="Requerido/mes"
-            value={formatCurrency(amountResult.requiredMonthly)}
-            tone={isOnTrack ? 'text-emerald-400' : 'text-amber-400'}
-          />
-          <MiniStat
-            label="Tu ritmo actual"
-            value={hasCurrentPace ? formatCurrency(amountResult.currentMonthly) : '—'}
-            tone={memberInfo.textClass}
-          />
-          <MiniStat
-            label="Plazo"
-            value={`${amountResult.years} ${amountResult.years === 1 ? 'año' : 'años'}`}
-            tone="text-white"
-          />
-        </div>
+        {/* ── Bloque aporte (solo si plazo lleno) ── */}
+        {showAmountBlock && amountResult && (
+          <>
+            <div className="border-t border-slate-800" />
+            <section>
+              <p className="text-xs text-cyan-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <Calculator size={14} /> Si quieres lograrlo en {amountResult.years}{' '}
+                {amountResult.years === 1 ? 'año' : 'años'}
+              </p>
+              <div className="flex items-baseline gap-3 flex-wrap">
+                <span className="text-5xl sm:text-6xl font-bold text-white">
+                  {formatCurrency(amountResult.requiredMonthly)}
+                </span>
+                <span className="text-xl text-slate-300">/ mes</span>
+              </div>
+              <p className="text-slate-400 mt-2">
+                para llegar a{' '}
+                <strong className="text-white">{formatCurrency(amountResult.target)}</strong> en{' '}
+                <strong className="text-white">
+                  {amountResult.totalMonths} meses
+                </strong>
+                .
+              </p>
 
+              <AmountCushionBadge amountResult={amountResult} />
+
+              <div className="grid sm:grid-cols-3 gap-4 mt-5">
+                <MiniStat
+                  label="Requerido/mes"
+                  value={formatCurrency(amountResult.requiredMonthly)}
+                  tone={
+                    amountResult.cushion >= 0 ? 'text-emerald-400' : 'text-amber-400'
+                  }
+                />
+                <MiniStat
+                  label="Tu ritmo actual"
+                  value={
+                    amountResult.currentMonthly > 0
+                      ? formatCurrency(amountResult.currentMonthly)
+                      : '—'
+                  }
+                  tone={memberInfo.textClass}
+                />
+                <MiniStat
+                  label={
+                    amountResult.cushion >= 0 ? 'Colchón' : 'Te falta al mes'
+                  }
+                  value={
+                    amountResult.currentMonthly > 0
+                      ? formatCurrency(Math.abs(amountResult.cushion))
+                      : '—'
+                  }
+                  tone={
+                    amountResult.cushion >= 0 ? 'text-emerald-400' : 'text-amber-400'
+                  }
+                />
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* ── Chart único (doble línea cuando hay plazo; simple cuando no) ── */}
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
           <p className="text-xs text-slate-500 mb-3 flex items-center gap-2 flex-wrap">
             <Sparkles size={12} />
             {categoryHasNoHistory
               ? 'Estimación: la categoría no tiene historial, usamos % actual sobre el último ingreso.'
-              : sampleLabel}
-            {' · '}Cálculo con <strong className="text-slate-300">
-              {ea === '' || Number(ea) === 0 ? '0%' : `${Number(ea)}%`} EA
-            </strong>
+              : `Basado en ${
+                  timeResult.sampleCount
+                } ${timeResult.sampleCount === 1 ? 'periodo guardado' : 'periodos guardados'}.`}
+            {' · '}Cálculo con <strong className="text-slate-300">{eaLabel} EA</strong>
           </p>
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer>
-              <LineChart
-                data={amountChartData}
-                margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="year"
-                  stroke="#64748b"
-                  tickFormatter={(v: number) => `${v}a`}
-                  label={{
-                    value: 'Años',
-                    position: 'insideBottom',
-                    offset: -2,
-                    fill: '#64748b',
-                    fontSize: 11,
-                  }}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  stroke="#64748b"
-                  tickFormatter={(v: number) => formatShortCurrency(v)}
-                  width={70}
-                  tick={{ fontSize: 11 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: 12,
-                  }}
-                  labelStyle={{ color: '#cbd5e1' }}
-                  formatter={(value, name) => {
-                    const numValue = typeof value === 'number' ? value : Number(value ?? 0);
-                    const label =
-                      String(name) === 'requerido'
-                        ? 'Al ritmo requerido'
-                        : 'Al ritmo actual';
-                    return [formatCurrency(numValue), label];
-                  }}
-                  labelFormatter={(label) => `Año ${label}`}
-                />
-                <Legend
-                  wrapperStyle={{ paddingTop: 8, fontSize: 12 }}
-                  formatter={(value: string) =>
-                    value === 'requerido' ? 'Requerido' : 'Actual'
-                  }
-                />
-                <ReferenceLine
-                  y={amountResult.target}
-                  stroke="#34d399"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: 'Objetivo',
-                    position: 'right',
-                    fill: '#34d399',
-                    fontSize: 11,
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="requerido"
-                  stroke="#22d3ee"
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  stroke={memberInfo.id === 'simon' ? '#34d399' : '#f472b6'}
-                  strokeWidth={3}
-                  strokeDasharray="6 4"
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
+              {showAmountBlock && amountResult ? (
+                <LineChart
+                  data={amountChartData}
+                  margin={{ top: 10, right: 20, left: 10, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis
+                    dataKey="year"
+                    stroke="#64748b"
+                    tickFormatter={(v: number) => `${v}a`}
+                    label={{
+                      value: 'Años',
+                      position: 'insideBottom',
+                      offset: -2,
+                      fill: '#64748b',
+                      fontSize: 11,
+                    }}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#64748b"
+                    tickFormatter={(v: number) => formatShortCurrency(v)}
+                    width={70}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: 12,
+                    }}
+                    labelStyle={{ color: '#cbd5e1' }}
+                    formatter={(value, name) => {
+                      const numValue =
+                        typeof value === 'number' ? value : Number(value ?? 0);
+                      const label =
+                        String(name) === 'requerido'
+                          ? 'Al ritmo requerido'
+                          : 'Al ritmo actual';
+                      return [formatCurrency(numValue), label];
+                    }}
+                    labelFormatter={(label) => `Año ${label}`}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 8, fontSize: 12 }}
+                    formatter={(value: string) =>
+                      value === 'requerido' ? 'Requerido' : 'Actual'
+                    }
+                  />
+                  <ReferenceLine
+                    y={timeResult.target}
+                    stroke="#34d399"
+                    strokeDasharray="4 4"
+                    label={{
+                      value: 'Objetivo',
+                      position: 'right',
+                      fill: '#34d399',
+                      fontSize: 11,
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="requerido"
+                    stroke="#22d3ee"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    stroke={memberInfo.id === 'simon' ? '#34d399' : '#f472b6'}
+                    strokeWidth={3}
+                    strokeDasharray="6 4"
+                    dot={false}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              ) : (
+                <LineChart data={projectionData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis
+                    dataKey="month"
+                    stroke="#64748b"
+                    label={{
+                      value: 'Meses',
+                      position: 'insideBottom',
+                      offset: -2,
+                      fill: '#64748b',
+                      fontSize: 11,
+                    }}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#64748b"
+                    tickFormatter={(v: number) => formatShortCurrency(v)}
+                    width={70}
+                    tick={{ fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      border: '1px solid #334155',
+                      borderRadius: 12,
+                    }}
+                    labelStyle={{ color: '#cbd5e1' }}
+                    formatter={(value) => {
+                      const numValue =
+                        typeof value === 'number' ? value : Number(value ?? 0);
+                      return [formatCurrency(numValue), 'Ahorro'];
+                    }}
+                    labelFormatter={(label) => `Mes ${label}`}
+                  />
+                  <ReferenceLine
+                    y={timeResult.target}
+                    stroke="#34d399"
+                    strokeDasharray="4 4"
+                    label={{
+                      value: 'Objetivo',
+                      position: 'right',
+                      fill: '#34d399',
+                      fontSize: 11,
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="ahorro"
+                    stroke="#22d3ee"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface AmountCushionBadgeProps {
+  amountResult: AmountResult;
+}
+
+const AmountCushionBadge: React.FC<AmountCushionBadgeProps> = ({ amountResult }) => {
+  const isOnTrack = amountResult.cushion >= 0;
+  const hasCurrentPace = amountResult.currentMonthly > 0;
+
+  if (!hasCurrentPace) {
+    return (
+      <div className="mt-4 rounded-xl p-4 border bg-amber-500/10 border-amber-500/30 flex items-start gap-3">
+        <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-slate-300">
+          La categoría no tiene historial registrado. No podemos comparar tu ritmo actual con el
+          aporte requerido.
+        </p>
+      </div>
+    );
+  }
+
+  const shortfall = amountResult.requiredMonthly - amountResult.currentMonthly;
+
+  return (
+    <div
+      className={`mt-4 rounded-xl p-4 border ${
+        isOnTrack
+          ? 'bg-emerald-500/10 border-emerald-500/30'
+          : 'bg-amber-500/10 border-amber-500/30'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        {isOnTrack ? (
+          <TrendingUp size={20} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+        ) : (
+          <TrendingDown size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
+        )}
+        <div className="flex-1">
+          <p className={`font-semibold ${isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`}>
+            {isOnTrack ? '¡Vas por buen camino!' : 'Necesitas ajustar tu ritmo'}
+          </p>
+          <p className="text-sm text-slate-300 mt-1">
+            Tu ritmo actual es{' '}
+            <strong className="text-white">
+              {formatCurrency(amountResult.currentMonthly)}/mes
+            </strong>
+            {isOnTrack ? (
+              <>
+                {' '}· Te sobra{' '}
+                <strong className="text-emerald-400">
+                  {formatCurrency(amountResult.cushion)}/mes
+                </strong>
+                .
+              </>
+            ) : (
+              <>
+                {' '}· Te faltan{' '}
+                <strong className="text-amber-400">
+                  {formatCurrency(shortfall)}/mes
+                </strong>{' '}
+                para llegar a tiempo.
+              </>
+            )}
+          </p>
+          {amountResult.targetDateAtCurrent && amountResult.monthsAtCurrent && (
+            <p className="text-xs text-slate-400 mt-1.5">
+              Al ritmo actual llegarías en{' '}
+              <strong className="text-slate-200">{amountResult.targetDateAtCurrent}</strong>{' '}
+              ({amountResult.monthsAtCurrent} meses).
+            </p>
+          )}
         </div>
       </div>
     </div>
