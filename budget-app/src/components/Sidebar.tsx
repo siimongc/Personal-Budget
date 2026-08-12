@@ -6,6 +6,7 @@ import {
   MessageSquare,
   LineChart,
   BarChart3,
+  Target,
 } from 'lucide-react';
 import type { MemberId } from '../types';
 import { getMember } from '../lib/members';
@@ -20,6 +21,7 @@ export const navItems = [
   { id: 'categories', label: 'Categorías', icon: LayoutDashboard },
   { id: 'income', label: 'Distribuidor', icon: Wallet },
   { id: 'tracker', label: 'Tracker', icon: BarChart3 },
+  { id: 'dreams', label: 'Sueños', icon: Target },
   { id: 'calculators', label: 'Calculadoras', icon: Calculator },
   { id: 'telegram', label: 'Integración Telegram', icon: MessageSquare },
   { id: 'dashboard', label: 'Inversiones', icon: LineChart },
