@@ -5,6 +5,7 @@ import IncomeDistributor from './components/IncomeDistributor';
 import FinancialCalculators from './components/FinancialCalculators';
 import TelegramBotMVP from './components/TelegramBotMVP';
 import InvestmentDashboard from './components/InvestmentDashboard';
+import Tracker from './components/Tracker';
 import type { Category, MemberId } from './types';
 import { Menu, X } from 'lucide-react';
 import { supabase } from './lib/supabase';
@@ -81,6 +82,14 @@ function App() {
             onMemberChange={handleSetMember}
           />
         );
+      case 'tracker':
+        return (
+          <Tracker
+            categories={categories}
+            currentMember={currentMember}
+            onMemberChange={handleSetMember}
+          />
+        );
       case 'calculators':
         return <FinancialCalculators />;
       case 'telegram':
@@ -126,6 +135,7 @@ function App() {
             {[
               { id: 'categories', label: 'Categorías' },
               { id: 'income', label: 'Distribuidor' },
+              { id: 'tracker', label: 'Tracker' },
               { id: 'calculators', label: 'Calculadoras' },
               { id: 'telegram', label: 'Telegram (MVP)' },
               { id: 'dashboard', label: 'Inversiones' }

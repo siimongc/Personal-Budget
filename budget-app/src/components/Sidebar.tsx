@@ -4,7 +4,8 @@ import {
   Wallet,
   Calculator,
   MessageSquare,
-  LineChart
+  LineChart,
+  BarChart3,
 } from 'lucide-react';
 import type { MemberId } from '../types';
 import { getMember } from '../lib/members';
@@ -18,6 +19,7 @@ interface SidebarProps {
 export const navItems = [
   { id: 'categories', label: 'Categorías', icon: LayoutDashboard },
   { id: 'income', label: 'Distribuidor', icon: Wallet },
+  { id: 'tracker', label: 'Tracker', icon: BarChart3 },
   { id: 'calculators', label: 'Calculadoras', icon: Calculator },
   { id: 'telegram', label: 'Integración Telegram', icon: MessageSquare },
   { id: 'dashboard', label: 'Inversiones', icon: LineChart },

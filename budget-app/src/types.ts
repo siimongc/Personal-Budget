@@ -38,6 +38,24 @@ export interface MonthlyIncome {
   created_at: string;
 }
 
+export interface PeriodDistributionEntry {
+  category_id: string;
+  name: string;
+  percentage: number;
+  amount: number;
+  color?: string;
+}
+
+export interface PeriodSnapshot {
+  id: string;
+  owner: MemberId;
+  period: string;
+  income: number;
+  distributions: PeriodDistributionEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SavingsProjection {
   principal: number;
   annualInterestRate: number;

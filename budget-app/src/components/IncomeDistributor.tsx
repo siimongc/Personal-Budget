@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { DollarSign, PieChart, ArrowRight, Wallet, Save, Check } from 'lucide-react';
-import type { Category, MemberId } from '../types';
+import { DollarSign, PieChart, ArrowRight, Wallet, Save, Check, BookmarkPlus, RefreshCw } from 'lucide-react';
+import type { Category, MemberId, PeriodDistributionEntry } from '../types';
 import MemberSelector from './MemberSelector';
 import { currentPeriod, getMember } from '../lib/members';
 import { supabase } from '../lib/supabase';
@@ -18,6 +18,9 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
 }) => {
   const [income, setIncome] = useState<number | ''>('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [snapshotState, setSnapshotState] =
+    useState<'idle' | 'saving' | 'created' | 'updated' | 'error'>('idle');
+  const [snapshotExists, setSnapshotExists] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const period = currentPeriod();
   const activeMember = getMember(currentMember);
@@ -56,11 +59,73 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
       setIncome(data?.amount ?? '');
     };
 
+    const loadSnapshot = async () => {
+      const { data, error } = await supabase
+        .from('period_snapshots')
+        .select('id')
+        .eq('owner', currentMember)
+        .eq('period', period)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        console.error('Error consultando snapshot:', error);
+        return;
+      }
+      setSnapshotExists(Boolean(data));
+      setSnapshotState('idle');
+    };
+
     loadIncome();
+    loadSnapshot();
     return () => {
       cancelled = true;
     };
   }, [currentMember, period]);
+
+  // Guardar snapshot (distribución congelada del periodo)
+  const handleSavePeriod = async () => {
+    const amount = income === '' ? 0 : Number(income);
+    if (!Number.isFinite(amount) || amount <= 0 || categories.length === 0) return;
+
+    const distributions: PeriodDistributionEntry[] = categories.map((cat) => ({
+      category_id: cat.id,
+      name: cat.name,
+      percentage: Number(cat.percentage),
+      amount: (amount * Number(cat.percentage)) / 100,
+      color: cat.color,
+    }));
+
+    setSnapshotState('saving');
+    const { error } = await supabase
+      .from('period_snapshots')
+      .upsert(
+        {
+          owner: currentMember,
+          period,
+          income: amount,
+          distributions,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'owner,period' }
+      );
+
+    if (error) {
+      console.error('Error guardando snapshot:', error);
+      setSnapshotState('error');
+      return;
+    }
+
+    setSnapshotState(snapshotExists ? 'updated' : 'created');
+    setSnapshotExists(true);
+    setTimeout(() => setSnapshotState('idle'), 1800);
+  };
+
+  const canSaveSnapshot =
+    income !== '' &&
+    Number(income) > 0 &&
+    categories.length > 0 &&
+    snapshotState !== 'saving';
 
   // Persistir con debounce cuando cambia el ingreso
   useEffect(() => {
@@ -149,6 +214,51 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
               )}
               {saveState === 'idle' && income !== '' && (
                 <span className="text-slate-500">Periodo {period}</span>
+              )}
+            </div>
+
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSavePeriod}
+                disabled={!canSaveSnapshot}
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-slate-950 transition-all ${
+                  canSaveSnapshot
+                    ? `bg-gradient-to-r ${activeMember.gradient} hover:opacity-90 ${activeMember.glowClass}`
+                    : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                }`}
+              >
+                {snapshotState === 'saving' ? (
+                  <>
+                    <Save size={16} className="animate-pulse" /> Guardando periodo…
+                  </>
+                ) : snapshotState === 'updated' ? (
+                  <>
+                    <RefreshCw size={16} /> Periodo actualizado
+                  </>
+                ) : snapshotState === 'created' ? (
+                  <>
+                    <Check size={16} /> Periodo guardado
+                  </>
+                ) : snapshotExists ? (
+                  <>
+                    <RefreshCw size={16} /> Actualizar periodo
+                  </>
+                ) : (
+                  <>
+                    <BookmarkPlus size={16} /> Guardar periodo
+                  </>
+                )}
+              </button>
+
+              {snapshotState === 'error' && (
+                <span className="text-xs text-rose-400">No se pudo guardar el periodo, reintenta.</span>
+              )}
+
+              {snapshotState === 'idle' && snapshotExists && (
+                <span className="text-[11px] text-slate-500">
+                  Ya tienes un snapshot de este periodo. Vuelve a pulsar para actualizarlo.
+                </span>
               )}
             </div>
           </div>
