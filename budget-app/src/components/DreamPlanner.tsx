@@ -60,6 +60,54 @@ const formatTargetDate = (monthsAhead: number): string => {
   return `${MONTHS_ES[d.getMonth()]} ${d.getFullYear()}`;
 };
 
+// Conversión de tasa efectiva anual (en %) a tasa efectiva mensual (en decimal).
+// Si EA = 0 → TEM = 0 (modo lineal).
+const eaToMonthly = (eaPct: number): number => {
+  if (eaPct <= 0) return 0;
+  return Math.pow(1 + eaPct / 100, 1 / 12) - 1;
+};
+
+// Valor futuro con anualidad: FV = PV × (1+i)^n + PMT × [((1+i)^n − 1) / i].
+// Caso degenerado i = 0 → FV = PV + PMT × n (lineal).
+const fvAtMonth = (pv: number, pmt: number, months: number, eaPct: number): number => {
+  if (months <= 0) return pv;
+  const i = eaToMonthly(eaPct);
+  if (i === 0) return pv + pmt * months;
+  const growth = Math.pow(1 + i, months);
+  return pv * growth + (pmt * (growth - 1)) / i;
+};
+
+// Meses necesarios para que FV ≥ goal. Iteración numérica con cap 1200 meses.
+const monthsToReachGoal = (
+  pv: number,
+  goal: number,
+  pmt: number,
+  eaPct: number
+): number => {
+  if (pv >= goal) return 0;
+  for (let n = 1; n <= 1200; n++) {
+    if (fvAtMonth(pv, pmt, n, eaPct) >= goal) return n;
+  }
+  return -1;
+};
+
+// Aporte mensual requerido para alcanzar goal en `years` con compound growth.
+// PMT = (goal − PV × (1+i)^n) / [((1+i)^n − 1) / i]
+const requiredMonthlyCompound = (
+  pv: number,
+  goal: number,
+  years: number,
+  eaPct: number
+): number => {
+  const n = Math.max(1, Math.round(years * 12));
+  const i = eaToMonthly(eaPct);
+  const growth = Math.pow(1 + i, n);
+  const pvFuture = pv * growth;
+  if (pvFuture >= goal) return 0;
+  if (i === 0) return (goal - pv) / n;
+  return (goal - pvFuture) / ((growth - 1) / i);
+};
+
 const DreamPlanner: React.FC<DreamPlannerProps> = ({
   categories,
   currentMember,
@@ -71,6 +119,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
   const [categoryId, setCategoryId] = useState<string>('');
   const [goal, setGoal] = useState<number | ''>('');
   const [years, setYears] = useState<number | ''>('');
+  const [ea, setEa] = useState<number | ''>(5);
 
   const [snapshots, setSnapshots] = useState<PeriodSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,16 +197,37 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
     const target = Number(goal);
     const remaining = target - saved;
     const contribution = monthlyContribution.value;
+    const eaPct = ea === '' ? 0 : Number(ea);
 
     if (remaining <= 0) {
       return { kind: 'covered' as const, saved, target };
     }
 
+    // Sin aporte mensual pero con EA > 0: cálculo compuesto desde PV solo.
     if (contribution <= 0) {
+      if (eaPct > 0 && saved > 0) {
+        const yearsNeeded = Math.log(target / saved) / Math.log(1 + eaPct / 100);
+        if (Number.isFinite(yearsNeeded) && yearsNeeded > 0) {
+          const months = Math.ceil(yearsNeeded * 12);
+          return {
+            kind: 'projection' as const,
+            saved,
+            target,
+            remaining,
+            contribution,
+            months,
+            targetDate: formatTargetDate(months),
+            sampleCount: monthlyContribution.sampleCount,
+          };
+        }
+      }
       return { kind: 'no_contribution' as const, saved, target, remaining };
     }
 
-    const months = Math.ceil(remaining / contribution);
+    const months = monthsToReachGoal(saved, target, contribution, eaPct);
+    if (months <= 0) {
+      return { kind: 'no_contribution' as const, saved, target, remaining };
+    }
     const targetDate = formatTargetDate(months);
     return {
       kind: 'projection' as const,
@@ -169,7 +239,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
       targetDate,
       sampleCount: monthlyContribution.sampleCount,
     };
-  }, [currentSavings, goal, monthlyContribution]);
+  }, [currentSavings, goal, ea, monthlyContribution]);
 
   // Cálculo del sueño: modo aporte
   const amountResult = useMemo(() => {
@@ -186,21 +256,24 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
     const target = Number(goal);
     const yearsNum = Number(years);
     const remaining = target - saved;
+    const eaPct = ea === '' ? 0 : Number(ea);
 
     if (remaining <= 0) {
       return { kind: 'covered' as const, saved, target };
     }
 
     const totalMonths = Math.max(1, Math.round(yearsNum * 12));
-    const requiredMonthly = remaining / totalMonths;
+    const requiredMonthly = requiredMonthlyCompound(saved, target, yearsNum, eaPct);
     const currentMonthly = monthlyContribution.value;
     const cushion = currentMonthly - requiredMonthly;
 
     let monthsAtCurrent: number | null = null;
     let targetDateAtCurrent: string | null = null;
     if (currentMonthly > 0) {
-      monthsAtCurrent = Math.ceil(remaining / currentMonthly);
-      targetDateAtCurrent = formatTargetDate(monthsAtCurrent);
+      monthsAtCurrent = monthsToReachGoal(saved, target, currentMonthly, eaPct);
+      if (monthsAtCurrent > 0) {
+        targetDateAtCurrent = formatTargetDate(monthsAtCurrent);
+      }
     }
 
     return {
@@ -217,45 +290,60 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
       targetDateAtCurrent,
       sampleCount: monthlyContribution.sampleCount,
     };
-  }, [currentSavings, goal, years, monthlyContribution]);
+  }, [currentSavings, goal, years, ea, monthlyContribution]);
 
   // Datos para el mini chart de proyección (modo tiempo)
   const projectionData = useMemo(() => {
     if (!timeResult || timeResult.kind !== 'projection') return [];
     const { saved, contribution, months } = timeResult;
+    const eaPct = ea === '' ? 0 : Number(ea);
     const points: Array<{ month: number; ahorro: number }> = [{ month: 0, ahorro: saved }];
     const step = Math.max(1, Math.ceil(months / 30));
     for (let m = step; m <= months; m += step) {
-      points.push({ month: m, ahorro: saved + contribution * m });
+      points.push({ month: m, ahorro: fvAtMonth(saved, contribution, m, eaPct) });
     }
     if (points[points.length - 1].month !== months) {
-      points.push({ month: months, ahorro: saved + contribution * months });
+      points.push({
+        month: months,
+        ahorro: fvAtMonth(saved, contribution, months, eaPct),
+      });
     }
     return points;
-  }, [timeResult]);
+  }, [timeResult, ea]);
 
   // Datos para el mini chart de proyección (modo aporte) — doble línea
   const amountChartData = useMemo(() => {
     if (!amountResult || amountResult.kind !== 'amount') return [];
-    const { saved, requiredMonthly, currentMonthly, totalMonths, years: yearsNum } = amountResult;
+    const {
+      saved,
+      requiredMonthly,
+      currentMonthly,
+      totalMonths,
+      years: yearsNum,
+    } = amountResult;
+    const eaPct = ea === '' ? 0 : Number(ea);
     const step = Math.max(1, Math.ceil(totalMonths / 30));
     const points: Array<{ year: number; requerido: number; actual: number }> = [];
     for (let m = 0; m <= totalMonths; m += step) {
       points.push({
         year: Number((m / 12).toFixed(2)),
-        requerido: saved + requiredMonthly * m,
-        actual: saved + (currentMonthly > 0 ? currentMonthly * m : 0),
+        requerido: fvAtMonth(saved, requiredMonthly, m, eaPct),
+        actual:
+          currentMonthly > 0 ? fvAtMonth(saved, currentMonthly, m, eaPct) : saved,
       });
     }
     if (points[points.length - 1].year !== yearsNum) {
       points.push({
         year: Number(yearsNum.toFixed(2)),
-        requerido: saved + requiredMonthly * totalMonths,
-        actual: saved + (currentMonthly > 0 ? currentMonthly * totalMonths : 0),
+        requerido: fvAtMonth(saved, requiredMonthly, totalMonths, eaPct),
+        actual:
+          currentMonthly > 0
+            ? fvAtMonth(saved, currentMonthly, totalMonths, eaPct)
+            : saved,
       });
     }
     return points;
-  }, [amountResult]);
+  }, [amountResult, ea]);
 
   const noCategories = !loading && memberCategories.length === 0;
   const noSnapshots = !loading && snapshots.length === 0;
@@ -486,6 +574,34 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                   </span>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1 flex items-center justify-between">
+                  <span>Interés efectivo anual</span>
+                  <span className="text-xs text-slate-500">Crecimiento compuesto</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    placeholder="0"
+                    value={ea}
+                    onChange={(e) =>
+                      setEa(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-16 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                  />
+                  <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500 text-sm">
+                    % EA
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1.5">
+                  Tu ahorro crece a esta tasa cada año. Pon <strong className="text-slate-300">0%</strong> para cálculo lineal.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -498,6 +614,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                 selectedCategory={selectedCategory}
                 projectionData={projectionData}
                 categoryHasNoHistory={selectedCategoryHasNoHistory}
+                ea={ea}
               />
             ) : (
               <AmountModeResult
@@ -505,6 +622,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                 memberInfo={memberInfo}
                 amountChartData={amountChartData}
                 categoryHasNoHistory={selectedCategoryHasNoHistory}
+                ea={ea}
               />
             )}
 
@@ -609,6 +727,7 @@ interface TimeModeResultProps {
   selectedCategory: Category | null;
   projectionData: Array<{ month: number; ahorro: number }>;
   categoryHasNoHistory: boolean;
+  ea: number | '';
 }
 
 const TimeModeResult: React.FC<TimeModeResultProps> = ({
@@ -617,6 +736,7 @@ const TimeModeResult: React.FC<TimeModeResultProps> = ({
   selectedCategory,
   projectionData,
   categoryHasNoHistory,
+  ea,
 }) => {
   if (!timeResult) {
     return (
@@ -697,6 +817,9 @@ const TimeModeResult: React.FC<TimeModeResultProps> = ({
             {categoryHasNoHistory
               ? 'Estimación: la categoría no tiene historial, usamos % actual sobre el último ingreso.'
               : `Basado en ${timeResult.sampleCount} ${timeResult.sampleCount === 1 ? 'periodo guardado' : 'periodos guardados'}.`}
+            {' · '}Cálculo con <strong className="text-slate-300">
+              {ea === '' || Number(ea) === 0 ? '0%' : `${Number(ea)}%`} EA
+            </strong>
           </p>
           <div style={{ width: '100%', height: 200 }}>
             <ResponsiveContainer>
@@ -786,6 +909,7 @@ interface AmountModeResultProps {
   memberInfo: ReturnType<typeof getMember>;
   amountChartData: Array<{ year: number; requerido: number; actual: number }>;
   categoryHasNoHistory: boolean;
+  ea: number | '';
 }
 
 const AmountModeResult: React.FC<AmountModeResultProps> = ({
@@ -793,6 +917,7 @@ const AmountModeResult: React.FC<AmountModeResultProps> = ({
   memberInfo,
   amountChartData,
   categoryHasNoHistory,
+  ea,
 }) => {
   if (!amountResult) {
     return (
@@ -929,11 +1054,14 @@ const AmountModeResult: React.FC<AmountModeResultProps> = ({
         </div>
 
         <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-          <p className="text-xs text-slate-500 mb-3 flex items-center gap-2">
+          <p className="text-xs text-slate-500 mb-3 flex items-center gap-2 flex-wrap">
             <Sparkles size={12} />
             {categoryHasNoHistory
               ? 'Estimación: la categoría no tiene historial, usamos % actual sobre el último ingreso.'
               : sampleLabel}
+            {' · '}Cálculo con <strong className="text-slate-300">
+              {ea === '' || Number(ea) === 0 ? '0%' : `${Number(ea)}%`} EA
+            </strong>
           </p>
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer>
