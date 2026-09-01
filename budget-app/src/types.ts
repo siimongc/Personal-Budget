@@ -1,22 +1,16 @@
-export type MemberId = 'simon' | 'maria';
-
-export interface Member {
-  id: MemberId;
-  label: string;
-  initial: string;
-  accent: 'emerald' | 'pink';
-  gradient: string;
-  ringClass: string;
-  bgClass: string;
-  textClass: string;
-  glowClass: string;
+export interface Profile {
+  id: string;
+  display_name: string;
+  initial?: string;
+  accent?: string;
+  created_at?: string;
 }
 
 export interface Category {
   id: string;
   name: string;
   percentage: number;
-  owner: MemberId;
+  owner_id: string;
   created_at?: string;
   color?: string;
 }
@@ -26,13 +20,13 @@ export interface Expense {
   category_id: string;
   amount: number;
   description: string;
-  owner: MemberId;
+  owner_id: string;
   created_at: string;
 }
 
 export interface MonthlyIncome {
   id: string;
-  owner: MemberId;
+  owner_id: string;
   period: string;
   amount: number;
   created_at: string;
@@ -48,7 +42,7 @@ export interface PeriodDistributionEntry {
 
 export interface PeriodSnapshot {
   id: string;
-  owner: MemberId;
+  owner_id: string;
   period: string;
   income: number;
   distributions: PeriodDistributionEntry[];

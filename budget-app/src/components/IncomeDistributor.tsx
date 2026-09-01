@@ -1,21 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DollarSign, PieChart, ArrowRight, Wallet, Save, Check, BookmarkPlus, RefreshCw } from 'lucide-react';
-import type { Category, MemberId, PeriodDistributionEntry } from '../types';
-import MemberSelector from './MemberSelector';
-import { currentPeriod, getMember } from '../lib/members';
+import type { Category, PeriodDistributionEntry } from '../types';
+import { currentPeriod } from '../lib/period';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 
 interface IncomeDistributorProps {
   categories: Category[];
-  currentMember: MemberId;
-  onMemberChange: (member: MemberId) => void;
 }
 
-const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
-  categories,
-  currentMember,
-  onMemberChange,
-}) => {
+const IncomeDistributor: React.FC<IncomeDistributorProps> = ({ categories }) => {
+  const { user } = useAuth();
   const [income, setIncome] = useState<number | ''>('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [snapshotState, setSnapshotState] =
@@ -23,7 +18,6 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
   const [snapshotExists, setSnapshotExists] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const period = currentPeriod();
-  const activeMember = getMember(currentMember);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-CO', {
@@ -35,8 +29,9 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
 
   const totalPercentage = categories.reduce((acc, cat) => acc + cat.percentage, 0);
 
-  // Cargar el ingreso guardado para el miembro activo + mes actual
+  // Cargar el ingreso guardado del usuario logueado + mes actual
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
 
     const loadIncome = async () => {
@@ -44,7 +39,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
       const { data, error } = await supabase
         .from('monthly_income')
         .select('amount')
-        .eq('owner', currentMember)
+        .eq('owner_id', user.id)
         .eq('period', period)
         .maybeSingle();
 
@@ -63,7 +58,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
       const { data, error } = await supabase
         .from('period_snapshots')
         .select('id')
-        .eq('owner', currentMember)
+        .eq('owner_id', user.id)
         .eq('period', period)
         .maybeSingle();
 
@@ -81,10 +76,11 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [currentMember, period]);
+  }, [user, period]);
 
   // Guardar snapshot (distribución congelada del periodo)
   const handleSavePeriod = async () => {
+    if (!user) return;
     const amount = income === '' ? 0 : Number(income);
     if (!Number.isFinite(amount) || amount <= 0 || categories.length === 0) return;
 
@@ -101,13 +97,13 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
       .from('period_snapshots')
       .upsert(
         {
-          owner: currentMember,
+          owner_id: user.id,
           period,
           income: amount,
           distributions,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'owner,period' }
+        { onConflict: 'owner_id,period' }
       );
 
     if (error) {
@@ -129,6 +125,8 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
 
   // Persistir con debounce cuando cambia el ingreso
   useEffect(() => {
+    if (!user) return;
+
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -141,8 +139,8 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
       const { error } = await supabase
         .from('monthly_income')
         .upsert(
-          { owner: currentMember, period, amount },
-          { onConflict: 'owner,period' }
+          { owner_id: user.id, period, amount },
+          { onConflict: 'owner_id,period' }
         );
 
       if (error) {
@@ -159,37 +157,33 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
         clearTimeout(debounceRef.current);
       }
     };
-  }, [income, currentMember, period]);
+  }, [income, user, period]);
 
   return (
     <div className="space-y-6 max-w-4xl">
       <header>
         <h2 className="text-3xl font-bold text-white mb-2">Distribuidor de Ingresos</h2>
         <p className="text-slate-400">
-          Digita el ingreso mensual de{' '}
-          <span className={`font-semibold ${activeMember.textClass}`}>{activeMember.label}</span>{' '}
-          y mira cómo se reparte según sus porcentajes.
+          Digita tu ingreso mensual y mira cómo se reparte según tus porcentajes.
         </p>
       </header>
 
-      <MemberSelector currentMember={currentMember} onChange={onMemberChange} />
-
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-10 relative overflow-hidden backdrop-blur-xl">
-        <div className={`absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${activeMember.bgClass}`}></div>
+        <div className="absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none bg-emerald-500/10"></div>
         <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-[80px] rounded-full pointer-events-none"></div>
 
         <div className="relative z-10 flex flex-col items-center">
           <div className="w-full max-w-md">
             <label className="block text-center text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">
-              Ingreso Mensual de {activeMember.label}
+              Ingreso Mensual
             </label>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <DollarSign className={`h-6 w-6 ${activeMember.textClass}`} />
+                <DollarSign className="h-6 w-6 text-emerald-400" />
               </div>
               <input
                 type="number"
-                className={`block w-full pl-12 pr-4 py-4 bg-slate-950 border-2 border-slate-800 rounded-2xl text-3xl font-bold text-white placeholder-slate-700 focus:outline-none focus:border-transparent focus:ring-4 transition-all text-center ${activeMember.ringClass.replace('ring-', 'focus:ring-')}`}
+                className="block w-full pl-12 pr-4 py-4 bg-slate-950 border-2 border-slate-800 rounded-2xl text-3xl font-bold text-white placeholder-slate-700 focus:outline-none focus:border-transparent focus:ring-4 transition-all text-center focus:ring-emerald-500/50"
                 placeholder="0"
                 value={income}
                 onChange={(e) => setIncome(e.target.value === '' ? '' : Number(e.target.value))}
@@ -203,7 +197,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
                 </span>
               )}
               {saveState === 'saved' && (
-                <span className={`flex items-center gap-1.5 ${activeMember.textClass}`}>
+                <span className="flex items-center gap-1.5 text-emerald-400">
                   <Check size={12} /> Guardado en el servidor
                 </span>
               )}
@@ -224,7 +218,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
                 disabled={!canSaveSnapshot}
                 className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-slate-950 transition-all ${
                   canSaveSnapshot
-                    ? `bg-gradient-to-r ${activeMember.gradient} hover:opacity-90 ${activeMember.glowClass}`
+                    ? 'bg-gradient-to-r from-emerald-400 to-cyan-500 hover:opacity-90 shadow-[0_0_30px_rgba(52,211,153,0.25)]'
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                 }`}
               >
@@ -267,7 +261,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
         {income !== '' && Number(income) > 0 && categories.length > 0 && (
           <div className="mt-12">
             <h3 className="text-xl font-bold text-white flex items-center mb-6">
-              <PieChart className={`mr-2 ${activeMember.textClass}`} /> Distribución Calculada para {activeMember.label}
+              <PieChart className="mr-2 text-emerald-400" /> Distribución Calculada
             </h3>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -280,7 +274,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || '#34d399' }} />
                         <span className="text-slate-300 font-medium">{cat.name}</span>
                       </div>
-                      <span className={`${activeMember.bgClass} ${activeMember.textClass} text-xs font-bold px-2 py-1 rounded-md`}>
+                      <span className="bg-emerald-500/10 text-emerald-400 text-xs font-bold px-2 py-1 rounded-md">
                         {cat.percentage}%
                       </span>
                     </div>
@@ -296,7 +290,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
               <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center text-amber-400 text-sm">
                 <Wallet className="mr-3 flex-shrink-0" size={20} />
                 <p>
-                  Las categorías de {activeMember.label} suman un <strong>{totalPercentage}%</strong> en lugar de un 100%.
+                  Tus categorías suman un <strong>{totalPercentage}%</strong> en lugar de un 100%.
                   Queda un <strong>{(100 - totalPercentage).toFixed(1)}% ({formatCurrency((Number(income) * (100 - totalPercentage)) / 100)})</strong> sin asignar.
                 </p>
               </div>
@@ -307,7 +301,7 @@ const IncomeDistributor: React.FC<IncomeDistributorProps> = ({
         {(!categories || categories.length === 0) && (
           <div className="mt-10 text-center text-slate-500">
             <ArrowRight className="mx-auto h-8 w-8 mb-2 opacity-30" />
-            <p>{activeMember.label} aún no tiene categorías configuradas. Ve a la sección de Categorías primero.</p>
+            <p>Aún no tenés categorías configuradas. Ve a la sección de Categorías primero.</p>
           </div>
         )}
       </div>

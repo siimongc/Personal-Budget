@@ -7,38 +7,34 @@ import TelegramBotMVP from './components/TelegramBotMVP';
 import InvestmentDashboard from './components/InvestmentDashboard';
 import Tracker from './components/Tracker';
 import DreamPlanner from './components/DreamPlanner';
-import type { Category, MemberId } from './types';
+import AuthScreen from './components/AuthScreen';
+import ProfileOnboarding from './components/ProfileOnboarding';
+import type { Category } from './types';
 import { Menu, X } from 'lucide-react';
 import { supabase } from './lib/supabase';
-import { loadCurrentMember, saveCurrentMember } from './lib/members';
+import { useAuth } from './lib/AuthContext';
 
 function App() {
+  const { user, profile, loading: authLoading } = useAuth();
+
   const [currentTab, setCurrentTab] = useState('categories');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Estado global de miembro activo (Simón o María), persistido en localStorage
-  const [currentMember, setCurrentMember] = useState<MemberId>(() => loadCurrentMember());
-
-  // Estado global de categorías del miembro activo, proveniente de Supabase
+  // Estado global de categorías del usuario logueado, proveniente de Supabase
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const handleSetMember = (member: MemberId) => {
-    setCurrentMember(member);
-    saveCurrentMember(member);
-  };
-
   useEffect(() => {
-    fetchCategories(currentMember);
-  }, [currentMember]);
+    if (user) fetchCategories(user.id);
+  }, [user]);
 
-  const fetchCategories = async (owner: MemberId) => {
+  const fetchCategories = async (ownerId: string) => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
         .from('categories')
         .select('*')
-        .eq('owner', owner)
+        .eq('owner_id', ownerId)
         .order('created_at', { ascending: true });
 
       if (error) {
@@ -64,41 +60,25 @@ function App() {
       );
     }
 
+    const refetchCategories = () => {
+      if (user) fetchCategories(user.id);
+    };
+
     switch (currentTab) {
       case 'categories':
         return (
           <CategoriesManager
             categories={categories}
             setCategories={setCategories}
-            currentMember={currentMember}
-            onMemberChange={handleSetMember}
-            onAfterChange={() => fetchCategories(currentMember)}
+            onAfterChange={refetchCategories}
           />
         );
       case 'income':
-        return (
-          <IncomeDistributor
-            categories={categories}
-            currentMember={currentMember}
-            onMemberChange={handleSetMember}
-          />
-        );
+        return <IncomeDistributor categories={categories} />;
       case 'tracker':
-        return (
-          <Tracker
-            categories={categories}
-            currentMember={currentMember}
-            onMemberChange={handleSetMember}
-          />
-        );
+        return <Tracker categories={categories} />;
       case 'dreams':
-        return (
-          <DreamPlanner
-            categories={categories}
-            currentMember={currentMember}
-            onMemberChange={handleSetMember}
-          />
-        );
+        return <DreamPlanner categories={categories} />;
       case 'calculators':
         return <FinancialCalculators />;
       case 'telegram':
@@ -110,19 +90,33 @@ function App() {
           <CategoriesManager
             categories={categories}
             setCategories={setCategories}
-            currentMember={currentMember}
-            onMemberChange={handleSetMember}
-            onAfterChange={() => fetchCategories(currentMember)}
+            onAfterChange={refetchCategories}
           />
         );
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  if (!profile) {
+    return <ProfileOnboarding />;
+  }
+
   return (
     <div className="flex bg-slate-950 min-h-screen font-sans selection:bg-emerald-500/30">
 
       {/* Sidebar Desktop */}
-      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} currentMember={currentMember} />
+      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} />
 
       {/* Mobile Header Menu Button */}
       <div className="md:hidden fixed top-0 w-full bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center z-50">

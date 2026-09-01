@@ -23,14 +23,12 @@ import {
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
-import type { Category, MemberId, PeriodSnapshot } from '../types';
-import { getMember } from '../lib/members';
+import type { Category, PeriodSnapshot } from '../types';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 
 interface DreamPlannerProps {
   categories: Category[];
-  currentMember: MemberId;
-  onMemberChange?: (member: MemberId) => void;
 }
 
 const MONTHS_WINDOW = 3;
@@ -108,12 +106,8 @@ const requiredMonthlyCompound = (
   return (goal - pvFuture) / ((growth - 1) / i);
 };
 
-const DreamPlanner: React.FC<DreamPlannerProps> = ({
-  categories,
-  currentMember,
-  onMemberChange,
-}) => {
-  const [member, setMember] = useState<MemberId>(currentMember);
+const DreamPlanner: React.FC<DreamPlannerProps> = ({ categories }) => {
+  const { user } = useAuth();
   const [currentSavings, setCurrentSavings] = useState<number | ''>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [goal, setGoal] = useState<number | ''>('');
@@ -124,34 +118,25 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setMember(currentMember);
-  }, [currentMember]);
-
-  const memberInfo = getMember(member);
-  const memberCategories = useMemo(
-    () => categories.filter((c) => c.owner === member),
-    [categories, member]
-  );
-
-  useEffect(() => {
-    // Si la categoría seleccionada ya no existe para el miembro, limpiarla.
-    if (categoryId && !memberCategories.some((c) => c.id === categoryId)) {
+    // Si la categoría seleccionada ya no existe, limpiarla.
+    if (categoryId && !categories.some((c) => c.id === categoryId)) {
       setCategoryId('');
     }
-    if (!categoryId && memberCategories.length > 0) {
-      setCategoryId(memberCategories[0].id);
+    if (!categoryId && categories.length > 0) {
+      setCategoryId(categories[0].id);
     }
-  }, [memberCategories, categoryId]);
+  }, [categories, categoryId]);
 
-  // Cargar snapshots del miembro seleccionado
+  // Cargar snapshots del usuario logueado
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('period_snapshots')
         .select('*')
-        .eq('owner', member)
+        .eq('owner_id', user.id)
         .order('period', { ascending: false })
         .limit(MONTHS_WINDOW);
 
@@ -168,11 +153,11 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [member]);
+  }, [user]);
 
   const selectedCategory = useMemo(
-    () => memberCategories.find((c) => c.id === categoryId) ?? null,
-    [memberCategories, categoryId]
+    () => categories.find((c) => c.id === categoryId) ?? null,
+    [categories, categoryId]
   );
 
   // Aporte mensual: promedio del monto de la categoría en los últimos snapshots
@@ -344,7 +329,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
     return points;
   }, [amountResult, ea]);
 
-  const noCategories = !loading && memberCategories.length === 0;
+  const noCategories = !loading && categories.length === 0;
   const noSnapshots = !loading && snapshots.length === 0;
   const selectedCategoryHasNoHistory =
     !!selectedCategory &&
@@ -364,76 +349,25 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
         </p>
       </header>
 
-      <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={16} className="text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-            ¿Para quién es el sueño?
-          </h3>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {(['simon', 'maria'] as MemberId[]).map((opt) => {
-            const info = getMember(opt);
-            const isActive = member === opt;
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => {
-                  setMember(opt);
-                  onMemberChange?.(opt);
-                }}
-                className={`relative text-left rounded-xl border p-4 transition-all duration-200 overflow-hidden ${
-                  isActive
-                    ? `border-transparent bg-slate-900 ring-2 ${info.ringClass} ${info.glowClass}`
-                    : 'border-slate-800 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-900'
-                }`}
-              >
-                <div
-                  className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl pointer-events-none transition-opacity duration-500 ${
-                    isActive ? 'opacity-100' : 'opacity-0'
-                  } ${info.bgClass}`}
-                />
-                <div className="relative z-10 flex items-center gap-3">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold bg-gradient-to-tr ${info.gradient}`}
-                  >
-                    {info.initial}
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${isActive ? 'text-white' : 'text-slate-300'}`}>
-                      {info.label}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {isActive ? 'Miembro activo' : 'Toca para seleccionar'}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       {noCategories ? (
         <EmptyState
           icon={<PiggyBank size={32} />}
-          title={`${memberInfo.label} aún no tiene categorías`}
+          title="Aún no tienes categorías"
           message="Crea categorías con sus porcentajes en la sección Categorías para poder calcular sueños."
         />
       ) : noSnapshots ? (
         <EmptyState
           icon={<Inbox size={32} />}
           title="No hay periodos guardados"
-          message={`Ve a Distribuidor, digita el ingreso de ${memberInfo.label} y pulsa "Guardar periodo" para empezar.`}
+          message='Ve a Distribuidor, digita tu ingreso y pulsa "Guardar periodo" para empezar.'
         />
       ) : (
         <div className="grid lg:grid-cols-5 gap-6">
           {/* Formulario */}
           <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
-            <div className={`absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${memberInfo.bgClass}`} />
+            <div className="absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none bg-emerald-500/10" />
             <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
-              <GoalIcon size={18} className={memberInfo.textClass} />
+              <GoalIcon size={18} className="text-emerald-400" />
               Tu punto de partida
             </h3>
 
@@ -455,7 +389,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                     onChange={(e) =>
                       setCurrentSavings(e.target.value === '' ? '' : Number(e.target.value))
                     }
-                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-4 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-4 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors focus:ring-emerald-500/50"
                   />
                 </div>
               </div>
@@ -467,9 +401,9 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                 <select
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
-                  className={`w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:border-transparent transition-colors focus:ring-emerald-500/50"
                 >
-                  {memberCategories.map((c) => (
+                  {categories.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.percentage}%)
                     </option>
@@ -478,7 +412,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                 {selectedCategory && (
                   <p className="text-xs text-slate-500 mt-1.5">
                     En el último periodo, {selectedCategory.name} recibió{' '}
-                    <span className={memberInfo.textClass}>
+                    <span className="text-emerald-400">
                       {formatCurrency(
                         snapshots[0]?.distributions.find((d) => d.name === selectedCategory.name)
                           ?.amount ?? 0
@@ -506,7 +440,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                     onChange={(e) =>
                       setGoal(e.target.value === '' ? '' : Number(e.target.value))
                     }
-                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-4 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-4 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors focus:ring-emerald-500/50"
                   />
                 </div>
               </div>
@@ -527,7 +461,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                     onChange={(e) =>
                       setYears(e.target.value === '' ? '' : Number(e.target.value))
                     }
-                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-16 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-16 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors focus:ring-emerald-500/50"
                   />
                   <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500 text-sm">
                     años
@@ -552,7 +486,7 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
                     onChange={(e) =>
                       setEa(e.target.value === '' ? '' : Number(e.target.value))
                     }
-                    className={`w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-16 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${memberInfo.ringClass.replace('ring-', 'focus:ring-')}`}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-4 pr-16 py-2.5 text-white placeholder-slate-700 focus:outline-none focus:ring-2 focus:border-transparent transition-colors focus:ring-emerald-500/50"
                   />
                   <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500 text-sm">
                     % EA
@@ -570,7 +504,6 @@ const DreamPlanner: React.FC<DreamPlannerProps> = ({
             <CombinedResult
               timeResult={timeResult}
               amountResult={amountResult}
-              memberInfo={memberInfo}
               selectedCategory={selectedCategory}
               projectionData={projectionData}
               amountChartData={amountChartData}
@@ -612,14 +545,13 @@ const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, message }) => (
 );
 
 interface CoveredCardProps {
-  memberInfo: ReturnType<typeof getMember>;
   saved: number;
   target: number;
 }
 
-const CoveredCard: React.FC<CoveredCardProps> = ({ memberInfo, saved, target }) => (
+const CoveredCard: React.FC<CoveredCardProps> = ({ saved, target }) => (
   <div className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 rounded-2xl p-8 relative overflow-hidden">
-    <div className={`absolute -top-20 -right-20 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${memberInfo.bgClass}`} />
+    <div className="absolute -top-20 -right-20 w-64 h-64 blur-[80px] rounded-full pointer-events-none bg-emerald-500/10" />
     <div className="relative z-10 flex flex-col items-center text-center">
       <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
         <CheckCircle2 size={32} />
@@ -697,7 +629,6 @@ type AmountResultType =
 interface CombinedResultProps {
   timeResult: TimeResult;
   amountResult: AmountResultType;
-  memberInfo: ReturnType<typeof getMember>;
   selectedCategory: Category | null;
   projectionData: Array<{ month: number; ahorro: number }>;
   amountChartData: Array<{ year: number; requerido: number; actual: number }>;
@@ -709,7 +640,6 @@ interface CombinedResultProps {
 const CombinedResult: React.FC<CombinedResultProps> = ({
   timeResult,
   amountResult,
-  memberInfo,
   selectedCategory,
   projectionData,
   amountChartData,
@@ -733,13 +663,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
 
   // Covered: ya tienes el objetivo.
   if (timeResult.kind === 'covered') {
-    return (
-      <CoveredCard
-        memberInfo={memberInfo}
-        saved={timeResult.saved}
-        target={timeResult.target}
-      />
-    );
+    return <CoveredCard saved={timeResult.saved} target={timeResult.target} />;
   }
 
   // No contribution: nunca llega con 0 aporte y 0% EA.
@@ -763,7 +687,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 relative overflow-hidden">
-      <div className={`absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none ${memberInfo.bgClass}`} />
+      <div className="absolute -top-24 -right-24 w-64 h-64 blur-[80px] rounded-full pointer-events-none bg-emerald-500/10" />
       <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-cyan-500/10 blur-[80px] rounded-full pointer-events-none" />
 
       <div className="relative z-10 space-y-8">
@@ -773,7 +697,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
             <Clock size={14} /> Al ritmo actual
           </p>
           <div className="flex items-baseline gap-3 flex-wrap">
-            <span className={`text-5xl sm:text-6xl font-bold ${memberInfo.textClass}`}>
+            <span className="text-5xl sm:text-6xl font-bold text-emerald-400">
               {timeResult.months}
             </span>
             <span className="text-xl text-slate-300">
@@ -783,7 +707,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
           </div>
           <p className="text-slate-400 mt-2">
             con tu aporte de{' '}
-            <strong className={memberInfo.textClass}>
+            <strong className="text-emerald-400">
               {formatCurrency(timeResult.contribution)}/mes
             </strong>{' '}
             llegarías en <strong className="text-white">{timeResult.targetDate}</strong>.
@@ -793,7 +717,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
             <MiniStat
               label="Tu ritmo/mes"
               value={formatCurrency(timeResult.contribution)}
-              tone={memberInfo.textClass}
+              tone="text-emerald-400"
             />
             <MiniStat
               label="Te faltan"
@@ -849,7 +773,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
                       ? formatCurrency(amountResult.currentMonthly)
                       : '—'
                   }
-                  tone={memberInfo.textClass}
+                  tone="text-emerald-400"
                 />
                 <MiniStat
                   label={
@@ -953,7 +877,7 @@ const CombinedResult: React.FC<CombinedResultProps> = ({
                   <Line
                     type="monotone"
                     dataKey="actual"
-                    stroke={memberInfo.id === 'simon' ? '#34d399' : '#f472b6'}
+                    stroke="#34d399"
                     strokeWidth={3}
                     strokeDasharray="6 4"
                     dot={false}

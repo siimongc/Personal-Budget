@@ -7,15 +7,22 @@ import {
   LineChart,
   BarChart3,
   Target,
+  LogOut,
 } from 'lucide-react';
-import type { MemberId } from '../types';
-import { getMember } from '../lib/members';
+import { useAuth } from '../lib/AuthContext';
+import { signOut } from '../lib/auth';
 
 interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
-  currentMember: MemberId;
 }
+
+const ACCENT_GRADIENTS: Record<string, string> = {
+  emerald: 'from-emerald-400 to-cyan-500',
+  pink: 'from-pink-400 to-fuchsia-500',
+  amber: 'from-amber-400 to-orange-500',
+  violet: 'from-violet-400 to-indigo-500',
+};
 
 export const navItems = [
   { id: 'categories', label: 'Categorías', icon: LayoutDashboard },
@@ -27,8 +34,10 @@ export const navItems = [
   { id: 'dashboard', label: 'Inversiones', icon: LineChart },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, currentMember }) => {
-  const member = getMember(currentMember);
+const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
+  const { profile, user } = useAuth();
+  const displayName = profile?.display_name ?? user?.email ?? '';
+  const initial = profile?.initial ?? displayName.charAt(0).toUpperCase();
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 h-screen flex flex-col hidden md:flex">
@@ -57,16 +66,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, currentMem
           );
         })}
       </nav>
-      <div className="p-6 mt-auto">
+      <div className="p-6 mt-auto space-y-2">
         <div className="bg-slate-800 p-4 rounded-xl flex items-center space-x-3">
-          <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${member.gradient} flex items-center justify-center text-white font-bold text-sm`}>
-            {member.initial}
+          <div
+            className={`w-8 h-8 rounded-full bg-gradient-to-tr ${
+              ACCENT_GRADIENTS[profile?.accent ?? 'emerald']
+            } flex items-center justify-center text-white font-bold text-sm shrink-0`}
+          >
+            {initial}
           </div>
-          <div className="text-sm">
-            <p className="text-slate-200 font-medium">{member.label}</p>
-            <p className="text-slate-500 text-xs">Miembro activo</p>
+          <div className="text-sm min-w-0">
+            <p className="text-slate-200 font-medium truncate">{displayName}</p>
+            <p className="text-slate-500 text-xs">Sesión activa</p>
           </div>
         </div>
+        <button
+          onClick={() => signOut()}
+          className="w-full flex items-center space-x-2 px-4 py-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm"
+        >
+          <LogOut size={16} />
+          <span>Cerrar sesión</span>
+        </button>
       </div>
     </aside>
   );

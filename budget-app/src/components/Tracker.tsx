@@ -24,18 +24,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { Category, MemberId, MonthlyIncome, PeriodSnapshot } from '../types';
-import { MEMBERS, getMember } from '../lib/members';
+import type { Category, MonthlyIncome, PeriodSnapshot } from '../types';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/AuthContext';
 
 interface TrackerProps {
   categories: Category[];
-  currentMember: MemberId;
-  onMemberChange?: (member: MemberId) => void;
 }
 
 type RangeKey = '1m' | '3m' | '6m' | '12m' | 'all';
-type OwnerFilter = MemberId | 'both';
 
 const RANGE_OPTIONS: { key: RangeKey; label: string; months: number | null }[] = [
   { key: '1m', label: '1 mes', months: 1 },
@@ -82,40 +79,34 @@ const shiftMonthKey = (key: string, deltaMonths: number): string => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberChange }) => {
-  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>(currentMember);
+const Tracker: React.FC<TrackerProps> = ({ categories }) => {
+  const { user } = useAuth();
   const [range, setRange] = useState<RangeKey>('6m');
 
   const [incomeRows, setIncomeRows] = useState<MonthlyIncome[]>([]);
   const [snapshots, setSnapshots] = useState<PeriodSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingPeriod, setDeletingPeriod] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteFeedback, setDeleteFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
 
-  useEffect(() => {
-    setOwnerFilter(currentMember);
-  }, [currentMember]);
-
   const handleDeleteSnapshot = async (snap: PeriodSnapshot) => {
-    const memberLabel = getMember(snap.owner).label;
     const monthLabel = monthKeyToLabel(periodToMonthKey(snap.period));
     const confirmed = window.confirm(
-      `¿Eliminar el periodo ${monthLabel} de ${memberLabel}? Esta acción no se deshace.`
+      `¿Eliminar el periodo ${monthLabel}? Esta acción no se deshace.`
     );
     if (!confirmed) return;
 
-    setDeletingPeriod(snap.period);
+    setDeletingId(snap.id);
     setDeleteFeedback(null);
 
     const { error: deleteError } = await supabase
       .from('period_snapshots')
       .delete()
-      .eq('owner', snap.owner)
-      .eq('period', snap.period);
+      .eq('id', snap.id);
 
     if (deleteError) {
       console.error('Error eliminando snapshot:', deleteError);
@@ -123,22 +114,21 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
         type: 'error',
         message: `No se pudo eliminar el periodo ${monthLabel}.`,
       });
-      setDeletingPeriod(null);
+      setDeletingId(null);
       return;
     }
 
-    setSnapshots((prev) =>
-      prev.filter((s) => !(s.owner === snap.owner && s.period === snap.period))
-    );
+    setSnapshots((prev) => prev.filter((s) => s.id !== snap.id));
     setDeleteFeedback({
       type: 'success',
-      message: `Periodo ${monthLabel} de ${memberLabel} eliminado.`,
+      message: `Periodo ${monthLabel} eliminado.`,
     });
-    setDeletingPeriod(null);
+    setDeletingId(null);
     setTimeout(() => setDeleteFeedback(null), 2500);
   };
 
   useEffect(() => {
+    if (!user) return;
     let cancelled = false;
 
     const load = async () => {
@@ -146,19 +136,16 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
       setError(null);
       setDeleteFeedback(null);
       try {
-        const owners: MemberId[] =
-          ownerFilter === 'both' ? ['simon', 'maria'] : [ownerFilter];
-
         const [incomeRes, snapshotRes] = await Promise.all([
           supabase
             .from('monthly_income')
             .select('*')
-            .in('owner', owners)
+            .eq('owner_id', user.id)
             .order('period', { ascending: true }),
           supabase
             .from('period_snapshots')
             .select('*')
-            .in('owner', owners)
+            .eq('owner_id', user.id)
             .order('period', { ascending: true }),
         ]);
 
@@ -185,7 +172,7 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
     return () => {
       cancelled = true;
     };
-  }, [ownerFilter]);
+  }, [user]);
 
   // Filtrar por rango
   const rangeMonths = RANGE_OPTIONS.find((r) => r.key === range)?.months ?? null;
@@ -244,10 +231,8 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
     };
   }, [filteredIncome, filteredSnapshots]);
 
-  // Línea de ingresos: agrupada por mes y miembro
+  // Línea de ingresos: agrupada por mes
   const incomeLineData = useMemo(() => {
-    const owners: MemberId[] =
-      ownerFilter === 'both' ? ['simon', 'maria'] : [ownerFilter];
     const monthSet = new Set<string>();
     filteredIncome.forEach((r) => monthSet.add(periodToMonthKey(r.period)));
 
@@ -255,16 +240,10 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
 
     const sortedMonths = Array.from(monthSet).sort();
     return sortedMonths.map((monthKey) => {
-      const row: Record<string, string | number> = { month: monthKeyToLabel(monthKey) };
-      owners.forEach((owner) => {
-        const match = filteredIncome.find(
-          (r) => periodToMonthKey(r.period) === monthKey && r.owner === owner
-        );
-        row[owner] = match ? Number(match.amount) : 0;
-      });
-      return row;
+      const match = filteredIncome.find((r) => periodToMonthKey(r.period) === monthKey);
+      return { month: monthKeyToLabel(monthKey), income: match ? Number(match.amount) : 0 };
     });
-  }, [filteredIncome, ownerFilter]);
+  }, [filteredIncome]);
 
   // Área apilada por categoría: una serie por nombre de categoría
   const categoryAreaData = useMemo(() => {
@@ -273,8 +252,6 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
     const monthSet = new Set<string>();
     filteredSnapshots.forEach((s) => monthSet.add(periodToMonthKey(s.period)));
 
-    // Determinar si el ownerFilter es "ambos": en ese caso sumamos por mes+categoría
-    // sin distinguir miembros. Si es un miembro, mismo comportamiento.
     const categoryNames = new Set<string>();
     filteredSnapshots.forEach((s) =>
       s.distributions.forEach((d) => categoryNames.add(d.name))
@@ -332,9 +309,6 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
 
   const hasData = filteredIncome.length > 0 || filteredSnapshots.length > 0;
 
-  const memberColor = (owner: MemberId) =>
-    owner === 'simon' ? '#34d399' : '#f472b6';
-
   return (
     <div className="space-y-6 max-w-7xl">
       <header>
@@ -347,62 +321,28 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
       </header>
 
       <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet size={16} className="text-slate-400" />
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Miembro</h3>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {(['simon', 'maria', 'both'] as OwnerFilter[]).map((opt) => {
-                const isActive = ownerFilter === opt;
-                const label = opt === 'both' ? 'Ambos' : getMember(opt).label;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      setOwnerFilter(opt);
-                      if (opt !== 'both' && onMemberChange) onMemberChange(opt);
-                    }}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                      isActive
-                        ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30'
-                        : 'bg-slate-950/40 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <CalendarRange size={16} className="text-slate-400" />
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Rango</h3>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {RANGE_OPTIONS.map((opt) => {
-                const isActive = range === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setRange(opt.key)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                      isActive
-                        ? 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/30'
-                        : 'bg-slate-950/40 text-slate-400 hover:text-slate-200 border border-slate-800'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        <div className="flex items-center gap-2 mb-2">
+          <CalendarRange size={16} className="text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Rango</h3>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {RANGE_OPTIONS.map((opt) => {
+            const isActive = range === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setRange(opt.key)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/30'
+                    : 'bg-slate-950/40 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -465,24 +405,18 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
                   .sort((a, b) => (a.period < b.period ? 1 : -1))
                   .map((snap) => {
                     const monthLabel = monthKeyToLabel(periodToMonthKey(snap.period));
-                    const memberInfo = getMember(snap.owner);
-                    const isDeleting = deletingPeriod === snap.period;
+                    const isDeleting = deletingId === snap.id;
                     return (
                       <li
-                        key={`${snap.owner}-${snap.period}`}
+                        key={snap.id}
                         className="flex items-center justify-between gap-4 py-3 group"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-tr ${memberInfo.gradient}`}
-                          >
-                            {memberInfo.initial}
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-tr from-emerald-400 to-cyan-500">
+                            <Wallet size={16} />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-white truncate">
-                              {monthLabel} ·{' '}
-                              <span className={memberInfo.textClass}>{memberInfo.label}</span>
-                            </p>
+                            <p className="text-sm font-medium text-white truncate">{monthLabel}</p>
                             <p className="text-xs text-slate-500 truncate">
                               {formatCurrency(snap.income)} · {snap.distributions.length}{' '}
                               {snap.distributions.length === 1 ? 'categoría' : 'categorías'}
@@ -496,7 +430,7 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
                           className={`p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ${
                             isDeleting ? 'opacity-50 cursor-not-allowed' : ''
                           }`}
-                          aria-label={`Eliminar periodo ${monthLabel} de ${memberInfo.label}`}
+                          aria-label={`Eliminar periodo ${monthLabel}`}
                           title="Eliminar periodo"
                         >
                           <Trash2 size={16} />
@@ -558,36 +492,20 @@ const Tracker: React.FC<TrackerProps> = ({ categories, currentMember, onMemberCh
                         borderRadius: 12,
                       }}
                       labelStyle={{ color: '#cbd5e1' }}
-                      formatter={(value, name) => {
+                      formatter={(value) => {
                         const numValue = typeof value === 'number' ? value : Number(value ?? 0);
-                        const key = String(name ?? '');
-                        if (key === 'simon' || key === 'maria') {
-                          return [formatCurrency(numValue), MEMBERS.find((m) => m.id === key)?.label ?? key];
-                        }
-                        return [formatCurrency(numValue), key];
+                        return [formatCurrency(numValue), 'Ingreso'];
                       }}
                     />
-                    <Legend
-                      formatter={(value: string) =>
-                        value === 'simon' || value === 'maria'
-                          ? MEMBERS.find((m) => m.id === value)?.label ?? value
-                          : value
-                      }
+                    <Legend formatter={() => 'Ingreso'} />
+                    <Line
+                      type="monotone"
+                      dataKey="income"
+                      stroke="#34d399"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
                     />
-                    {(ownerFilter === 'both'
-                      ? (['simon', 'maria'] as MemberId[])
-                      : [ownerFilter as MemberId]
-                    ).map((owner) => (
-                      <Line
-                        key={owner}
-                        type="monotone"
-                        dataKey={owner}
-                        stroke={memberColor(owner)}
-                        strokeWidth={3}
-                        dot={{ r: 4 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
